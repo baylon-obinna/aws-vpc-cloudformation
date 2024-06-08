@@ -1,158 +1,178 @@
+### 08-06-24 ###
+### Baylon Obinna ###
 AWSTemplateFormatVersion: '2010-09-09'
-Description: AWS CloudFormation template to create VPC with public and private subnets, NAT Gateways, Route Tables, Auto Scaling Group, Bastion Host, and Application Load Balancer.
+Description: |
+  AWS CloudFormation template to create a VPC with public and private subnets,
+  NAT Gateways, Route Tables, Auto Scaling Group, Bastion Host, and Application Load Balancer.
 
 Parameters:
-  VpcCIDR:
-    Type: String
-    Default: "10.0.0.0/16"
-    Description: CIDR block for the VPC
-  AvailabilityZone1:
-    Type: String
-    Default: "us-east-1a"
+  availabilityZone1:
     Description: First availability zone
-  AvailabilityZone2:
+    Default: us-east-1a
     Type: String
-    Default: "us-east-1b"
+
+  availabilityZone2:
     Description: Second availability zone
+    Default: us-east-1b
+    Type: String
+
+  vpcCIDR:
+    Description: CIDR block for the VPC
+    Default: 10.0.0.0/16
+    Type: String
 
 Resources:
-  VPC:
+  # VPC
+  vpc:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: VpcCIDR
-    
+      CidrBlock: !Ref vpcCIDR
 
-  InternetGateway:
+  # Internet Gateway
+  internetGateway:
     Type: AWS::EC2::InternetGateway
+    DependsOn: vpc
+    Properties:
+      Tags:
+        - Key: Name
+          Value: InternetGateway
 
-  AttachGateway:
+  # Attach Gateway
+  attachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: VPC
-      InternetGatewayId: InternetGateway
+      InternetGatewayId: !Ref internetGateway
+      VpcId: !Ref vpc
 
-  PublicRouteTable:
+  # Public Subnets
+  publicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref availabilityZone1
+      CidrBlock: 10.0.1.0/24
+      VpcId: !Ref vpc
+
+  publicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref availabilityZone2
+      CidrBlock: 10.0.2.0/24
+      VpcId: !Ref vpc
+
+  # Public Route Table
+  publicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: VPC
+      VpcId: !Ref vpc
 
-  PublicSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: VPC
-      AvailabilityZone: AvailabilityZone1
-      CidrBlock: "10.0.1.0/24"
-  
-  PublicSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId:  VPC
-      AvailabilityZone: AvailabilityZone2
-      CidrBlock: "10.0.2.0/24"
-
-  PublicSubnet1RouteTableAssociation:
+  # Public Subnet Route Table Association
+  publicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId:  PublicSubnet1
-      RouteTableId: PublicRouteTable
+      RouteTableId: !Ref publicRouteTable
+      SubnetId: !Ref publicSubnet1
 
-  PublicSubnet2RouteTableAssociation:
+  publicSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId:  PublicSubnet2
-      RouteTableId:  PublicRouteTable
+      RouteTableId: !Ref publicRouteTable
+      SubnetId: !Ref publicSubnet2
 
-  NatGateway1EIP:
+  # Add Route in Public Route Table
+  publicRouteToInternetGateway:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref publicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref internetGateway
+
+  # NAT Gateways
+  natGateway1EIP:
     Type: AWS::EC2::EIP
-    DependsOn: AttachGateway
+    DependsOn: attachGateway
     Properties:
       Domain: vpc
 
-  NatGateway1:
+  natGateway1:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId:  NatGateway1EIP.AllocationId
-      SubnetId: PublicSubnet1
+      AllocationId: !GetAtt natGateway1EIP.AllocationId
+      SubnetId: !Ref publicSubnet1
 
-  NatGateway2EIP:
+  natGateway2EIP:
     Type: AWS::EC2::EIP
-    DependsOn: AttachGateway
+    DependsOn: attachGateway
     Properties:
       Domain: vpc
 
-  NatGateway2:
+  natGateway2:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId:  NatGateway2EIP.AllocationId
-      SubnetId:  PublicSubnet2
+      AllocationId: !GetAtt natGateway2EIP.AllocationId
+      SubnetId: !Ref publicSubnet2
 
-  PrivateRouteTable1:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: VPC
-
-  PrivateRouteTable2:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId:  VPC
-
-  PrivateSubnet1:
+  # Private Subnets
+  privateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId:  VPC
-      AvailabilityZone:  AvailabilityZone1
-      CidrBlock: "10.0.3.0/24"
-  
-  PrivateSubnet2:
+      AvailabilityZone: !Ref availabilityZone1
+      CidrBlock: 10.0.3.0/24
+      VpcId: !Ref vpc
+
+  privateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId:  VPC
-      AvailabilityZone:  AvailabilityZone2
-      CidrBlock: "10.0.4.0/24"
+      AvailabilityZone: !Ref availabilityZone2
+      CidrBlock: 10.0.4.0/24
+      VpcId: !Ref vpc
 
-  PrivateSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId:  PrivateSubnet1
-      RouteTableId:  PrivateRouteTable1
-
-  PrivateSubnet2RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId:  PrivateSubnet2
-      RouteTableId:  PrivateRouteTable2
-
-  AutoScalingGroup:
+  # Auto Scaling Group
+  autoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      VPCZoneIdentifier:
-        - PrivateSubnet1
-        - PrivateSubnet2
-      LaunchConfigurationName:  LaunchConfiguration
-      MinSize: '2'
-      MaxSize: '4'
       DesiredCapacity: '2'
+      LaunchConfigurationName: !Ref launchConfiguration
+      MaxSize: '4'
+      MinSize: '2'
+      VPCZoneIdentifier:
+        - !Ref privateSubnet1
+        - !Ref privateSubnet2
 
-  LaunchConfiguration:
+  # Launch Configuration
+  launchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
       ImageId: ami-04b70fa74e45c3917
       InstanceType: t2.micro
       SecurityGroups:
-        -  EC2SecurityGroup
+        - !Ref ec2SecurityGroup
 
-  EC2SecurityGroup:
+  # EC2 Security Group
+  ec2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for EC2 instances
-      VpcId:  VPC
       SecurityGroupIngress:
-        - IpProtocol: tcp
+        - CidrIp: 0.0.0.0/0
           FromPort: 22
+          IpProtocol: tcp
           ToPort: 22
-          CidrIp: 0.0.0.0/0
+      VpcId: !Ref vpc
 
-  BastionHost:
+  # Bastion Security Group
+  bastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Bastion host
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 22
+          IpProtocol: tcp
+          ToPort: 22
+      VpcId: !Ref vpc
+
+  # Bastion Host
+  bastionHost:
     Type: AWS::EC2::Instance
     Properties:
       ImageId: ami-04b70fa74e45c3917
@@ -162,44 +182,11 @@ Resources:
         - AssociatePublicIpAddress: true
           DeviceIndex: '0'
           GroupSet:
-            -  BastionSecurityGroup
-          SubnetId:  PublicSubnet
+            - !Ref bastionSecurityGroup
+          SubnetId: !Ref publicSubnet1
 
-  BastionSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
+  # Key Pair
+  bastionKeyPair:
+    Type: AWS::EC2::KeyPair
     Properties:
-      GroupDescription: Security group for Bastion host
-      VpcId:  VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-
-  LoadBalancer:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Subnets:
-        - PublicSubnet1
-        -  PublicSubnet2
-      SecurityGroups:
-        -  LoadBalancerSecurityGroup
-
-  LoadBalancerSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security group for Application Load Balancer
-      VpcId:  VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-
-  TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      VpcId:  VPC
-      Protocol: HTTP
-      Port: 80
-      TargetType: instance
+      KeyName: bastion-key
